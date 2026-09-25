@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (function() {
+        // 1. Intercept Vite HMR WebSocket connection attempts in container preview sandbox
+        if (typeof window !== 'undefined' && 'WebSocket' in window) {
+          const OriginalWebSocket = window.WebSocket;
+          window.WebSocket = new Proxy(OriginalWebSocket, {
+            construct(target, args) {
+              const [url, protocols] = args;
+              const isViteHmr =
+                protocols === 'vite-hmr' ||
+                (Array.isArray(protocols) && protocols.includes('vite-hmr')) ||
+                (typeof url === 'string' && (url.includes('token=') || url.includes('24678')));
+
+              if (isViteHmr) {
+                const mock = new EventTarget();
+                mock.readyState = 1; // WebSocket.OPEN
+                mock.OPEN = 1;
+                mock.CLOSED = 3;
+                mock.CLOSING = 2;
+                mock.CONNECTING = 0;
+                mock.binaryType = 'blob';
+                mock.bufferedAmount = 0;
+                mock.extensions = '';
+                mock.protocol = 'vite-hmr';
+                mock.url = url || '';
+                mock.send = function() {};
+                mock.close = function() {
+                  mock.readyState = 3;
+                  mock.dispatchEvent(new Event('close'));
+                };
+                // Dispatch open event on next microtask
+                Promise.resolve().then(() => {
+                  mock.dispatchEvent(new Event('open'));
+                });
+                return mock;
+              }
+              return Reflect.construct(target, args);
+            }
+          });
+        }
+
+        // 2. Filter benign vite connection warnings from console
+        const origError = console.error;
+        console.error = function(...args) {
+          if (
+            args.length > 0 &&
+            (
+              (typeof args[0] === 'string' && (args[0].includes('[vite]') || args[0].includes('WebSocket connection to'))) ||
+              (args[0] && typeof args[0] === 'object' && args[0].message && args[0].message.includes('WebSocket'))
+            )
+          ) {
+            return;
+          }
+          origError.apply(console, args);
+        };
+
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+          if (
+            args.length > 0 &&
+            typeof args[0] === 'string' &&
+            (args[0].includes('[vite]') || args[0].includes('WebSocket connection to'))
+          ) {
+            return;
+          }
+          origWarn.apply(console, args);
+        };
+
+        // 3. Catch unhandled rejection for websocket closes
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event.reason && typeof event.reason.message === 'string' && event.reason.message.includes('WebSocket closed without opened')) {
+            event.preventDefault();
+          }
+        });
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <title>Remix Forge Control Engine</title>
+    <meta name="description" content="Advanced AI model control, parameter steering, fine-tuning lab, highly modifiable image generator studio, and prompt engineering workspace with local and cloud inference for Android and PC." />
+    <meta property="og:title" content="Remix Forge Control Engine" />
+    <meta property="og:description" content="Advanced AI model control, parameter steering, fine-tuning lab, highly modifiable image generator studio, and prompt engineering workspace with local and cloud inference for Android and PC." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Forge" />
+    <meta name="application-name" content="Forge" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

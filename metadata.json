@@ -1,0 +1,10 @@
+{
+  "name": "Remix Remix Forge Control Engine",
+  "description": "Advanced AI model control, parameter steering, fine-tuning lab, and prompt engineering workspace with local and cloud inference.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

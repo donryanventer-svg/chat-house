@@ -45,11 +45,20 @@ export interface MessageBlock {
   showCaret?: boolean;
 }
 
+export interface ChatImage {
+  url: string;
+  prompt?: string;
+  model?: string;
+  aspectRatio?: string;
+  seed?: number;
+}
+
 export interface Attachment {
   id: string;
   name: string;
   size: string;
   type?: string;
+  dataUrl?: string;
 }
 
 export interface Message {
@@ -62,6 +71,7 @@ export interface Message {
   thinkingText?: string;
   thinkingOpen?: boolean;
   files?: Attachment[];
+  images?: ChatImage[];
   timestamp?: number;
 }
 
@@ -180,6 +190,7 @@ export interface HuggingFaceUser {
   isPro?: boolean;
   orgs?: Array<{ name: string; fullname?: string; avatarUrl?: string }>;
   tokenScope?: string;
+  token?: string;
   modelsCount?: number;
   datasetsCount?: number;
   spacesCount?: number;
@@ -228,10 +239,10 @@ export interface GeneratedImage {
   seed: number;
   guidanceScale: number;
   steps: number;
-  engine: 'gemini' | 'huggingface' | 'procedural';
+  engine: 'gemini' | 'huggingface' | 'flux-neural' | 'procedural' | string;
   modelName: string;
   imageUrl: string;
-  source: 'gemini' | 'huggingface' | 'procedural' | 'gemini-modified' | 'procedural-remix';
+  source: 'gemini' | 'huggingface' | 'flux-neural' | 'procedural' | 'gemini-modified' | 'procedural-remix' | 'archive-neural' | string;
   createdAt: number;
   stylePreset?: string;
   modifiers?: string[];

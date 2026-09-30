@@ -195,3 +195,68 @@ export const DEFAULT_IMAGE_ADJUSTMENTS = {
   watermarkPosition: 'bottom-right' as const,
   watermarkOpacity: 0.7,
 };
+
+export interface HfImageModelOption {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  badge?: string;
+  recommendedAspect?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
+  tag?: string;
+}
+
+export const HF_GENERATIVE_IMAGE_MODELS: HfImageModelOption[] = [
+  {
+    id: 'black-forest-labs/FLUX.1-schnell',
+    name: 'FLUX.1 Schnell',
+    author: 'Black Forest Labs',
+    description: '12B parameter state-of-the-art open visual generator. Ultra-fast 4-step generation with photorealistic fidelity.',
+    badge: 'Popular',
+    recommendedAspect: '16:9',
+    tag: 'Next-Gen Diffusion',
+  },
+  {
+    id: 'black-forest-labs/FLUX.1-dev',
+    name: 'FLUX.1 Dev',
+    author: 'Black Forest Labs',
+    description: 'Flagship open-weight FLUX model with unmatched prompt adhering, crisp typography, and anatomical perfection.',
+    badge: 'Flagship',
+    recommendedAspect: '1:1',
+    tag: '12B Parameters',
+  },
+  {
+    id: 'stabilityai/stable-diffusion-xl-base-1.0',
+    name: 'Stable Diffusion XL 1.0',
+    author: 'Stability AI',
+    description: 'Industry-standard base model for stunning photographic realism, rich cinematic color depth, and complex compositions.',
+    badge: 'SDXL',
+    recommendedAspect: '1:1',
+    tag: 'Studio Grade',
+  },
+  {
+    id: 'ByteDance/SDXL-Lightning',
+    name: 'SDXL Lightning',
+    author: 'ByteDance',
+    description: 'Distilled lightning-fast diffusion capable of generating high-resolution 1024x1024 imagery in sub-second times.',
+    badge: 'High Speed',
+    recommendedAspect: '16:9',
+    tag: '2-4 Step',
+  },
+  {
+    id: 'stabilityai/stable-diffusion-2-1',
+    name: 'Stable Diffusion 2.1',
+    author: 'Stability AI',
+    description: 'Trained on 768x768 resolution with OpenCLIP vit-H for broad artistic styling, architectural rendering, and landscapes.',
+    recommendedAspect: '4:3',
+    tag: '768px Base',
+  },
+  {
+    id: 'runwayml/stable-diffusion-v1-5',
+    name: 'Stable Diffusion 1.5',
+    author: 'RunwayML',
+    description: 'Lightweight, battle-tested foundational model with wide community ecosystem and minimal GPU footprint.',
+    recommendedAspect: '1:1',
+    tag: 'Lightweight',
+  },
+];

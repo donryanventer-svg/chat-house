@@ -18,8 +18,11 @@ import {
   Terminal,
   VolumeX,
   Waves,
+  Download,
+  ExternalLink,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { Message, Model, Attachment, SteeringParams, MessageBlock, VoiceSettings } from '../types';
+import { Message, Model, Attachment, SteeringParams, MessageBlock, VoiceSettings, ChatImage } from '../types';
 import { ModelSwitcher } from './ModelSwitcher';
 import { SpeechAudioVisualizer } from './SpeechAudioVisualizer';
 import { speechAudioEngine } from '../utils/speechAudioEngine';
@@ -93,6 +96,7 @@ interface ChatViewProps {
   isStreaming: boolean;
   voiceSettings?: VoiceSettings;
   onOpenHuggingFaceModal?: () => void;
+  onGoToImageStudio?: (image?: any) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -114,6 +118,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   isStreaming,
   voiceSettings,
   onOpenHuggingFaceModal,
+  onGoToImageStudio,
 }) => {
   const [composerText, setComposerText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -224,15 +229,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newAttachments: Attachment[] = Array.from(files).map((f: File) => ({
-      id: `att-${Date.now()}-${Math.random()}`,
-      name: f.name,
-      size: `${(f.size / 1024).toFixed(1)} KB`,
-      type: f.type,
-    }));
+    Array.from(files).forEach((f: File) => {
+      if (f.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          const dataUrl = re.target?.result as string;
+          const newAtt: Attachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            name: f.name,
+            size: `${(f.size / 1024).toFixed(1)} KB`,
+            type: f.type,
+            dataUrl,
+          };
+          setAttachments((prev) => [...prev, newAtt]);
+        };
+        reader.readAsDataURL(f);
+      } else {
+        const newAtt: Attachment = {
+          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: f.name,
+          size: `${(f.size / 1024).toFixed(1)} KB`,
+          type: f.type,
+        };
+        setAttachments((prev) => [...prev, newAtt]);
+      }
+    });
 
-    setAttachments((prev) => [...prev, ...newAttachments]);
-    onShowToast(`Attached ${newAttachments.length} document(s) to prompt context`);
+    onShowToast(`Attached ${files.length} file(s) to prompt context`);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -535,10 +558,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       {msg.files.map((file) => (
                         <div
                           key={file.id}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-mono"
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[#161622] border border-[#2b2b3a] text-[11px] text-[#e0e0ea] font-mono shadow-sm"
                         >
-                          <FileText className="w-3 h-3 text-sky-400" />
-                          <span>{file.name}</span>
+                          {file.dataUrl ? (
+                            <img
+                              src={file.dataUrl}
+                              alt={file.name}
+                              className="w-5 h-5 rounded object-cover border border-[#3b3b4d]"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <FileText className="w-3 h-3 text-[var(--color-accent)]" />
+                          )}
+                          <span className="truncate max-w-[150px]">{file.name}</span>
                         </div>
                       ))}
                     </div>
@@ -686,6 +718,75 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       </div>
                     );
                   })()}
+
+                  {/* Rendered Images from Generative Image Models (FLUX / SDXL / HF) */}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="space-y-3 my-3">
+                      {msg.images.map((img, iIdx) => (
+                        <div
+                          key={iIdx}
+                          className="blueprint bg-[#0a0a0d] border border-[#232330] rounded-lg overflow-hidden group shadow-xl max-w-lg"
+                        >
+                          <i className="corner tl" />
+                          <i className="corner tr" />
+                          <i className="corner bl" />
+                          <i className="corner br" />
+
+                          {/* Image Model & Spec Header */}
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-[#0f0f14] border-b border-[#1c1c24] text-[10px] font-mono">
+                            <span className="text-[var(--color-accent)] font-semibold flex items-center gap-1.5 truncate">
+                              <Sparkles className="w-3 h-3 text-[var(--color-accent)]" />
+                              <span>{img.model || 'FLUX.1 Schnell'}</span>
+                            </span>
+                            {img.aspectRatio && (
+                              <span className="text-[#888894] px-1.5 py-0.2 rounded bg-[#181820] border border-[#262632]">
+                                {img.aspectRatio}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Rendered Visual Artwork */}
+                          <div className="relative bg-[#050507] flex items-center justify-center p-2 group-hover:bg-[#07070a] transition-colors">
+                            <img
+                              src={img.url}
+                              alt={img.prompt || 'Generated Artwork'}
+                              className="max-h-80 w-auto rounded object-contain border border-[#1b1b22] shadow-md"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+
+                          {/* Action Toolbar */}
+                          <div className="flex items-center justify-between px-3 py-2 bg-[#0c0c10] border-t border-[#1a1a22] text-xs">
+                            <span className="text-[10px] font-mono text-[#888898] truncate max-w-[220px]" title={img.prompt}>
+                              {img.prompt || 'Generated Artwork'}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {onGoToImageStudio && (
+                                <button
+                                  type="button"
+                                  onClick={() => onGoToImageStudio(img)}
+                                  className="px-2 py-1 text-[10px] font-mono rounded bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/25 transition-colors flex items-center gap-1 cursor-pointer"
+                                  title="Open in Image Studio for remixing, post-FX, and canvas adjustments"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Studio</span>
+                                </button>
+                              )}
+                              <a
+                                href={img.url}
+                                download={`forge-artwork-${Date.now()}.png`}
+                                className="px-2 py-1 text-[10px] font-mono rounded bg-[#16161c] border border-[#282834] text-white hover:bg-[#202028] transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Download generated PNG image"
+                              >
+                                <Download className="w-3 h-3 text-[var(--color-accent)]" />
+                                <span>Save</span>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Correction Editor Box */}
                   {correctingMsgId === msg.id && (
@@ -923,6 +1024,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   }`}
                 >
                   <Mic className="w-4 h-4" />
+                </button>
+
+                {/* Generative Image Mode Button */}
+                <button
+                  type="button"
+                  id="btn-composer-image-mode"
+                  onClick={() => {
+                    setComposerText((prev) => {
+                      const trimmed = prev.trim();
+                      if (trimmed.startsWith('/image')) return trimmed;
+                      return trimmed ? `/image ${trimmed}` : '/image ';
+                    });
+                    onShowToast('Generative Image mode active. Type your visual prompt.');
+                  }}
+                  title="Generate image directly in chat with Hugging Face (FLUX.1 / SDXL)"
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono transition-colors cursor-pointer border ${
+                    composerText.startsWith('/image') || composerText.startsWith('/generate')
+                      ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)] border-[var(--color-accent)]/40 font-semibold'
+                      : 'text-[#888898] hover:text-[var(--color-accent)] hover:bg-[#181818] border-transparent'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                  <span className="hidden sm:inline">/image</span>
                 </button>
               </div>
 

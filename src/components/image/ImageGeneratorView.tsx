@@ -29,14 +29,19 @@ import {
   Camera,
   Cpu,
   SplitSquareVertical,
+  MessageSquare,
+  UploadCloud,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
-import { GeneratedImage, ImageAdjustments } from '../../types';
+import { GeneratedImage, ImageAdjustments, HuggingFaceUser } from '../../types';
 import {
   STYLE_PRESETS,
   MODIFIER_PILLS,
   SAMPLE_PROMPTS,
   NEGATIVE_PROMPT_PRESETS,
   DEFAULT_IMAGE_ADJUSTMENTS,
+  HF_GENERATIVE_IMAGE_MODELS,
 } from '../../data/imagePresets';
 import { ImageAdjustmentsPanel } from './ImageAdjustmentsPanel';
 import { ImageCompareSlider } from './ImageCompareSlider';
@@ -44,11 +49,19 @@ import { ImageCompareSlider } from './ImageCompareSlider';
 interface ImageGeneratorViewProps {
   onShowToast: (msg: string) => void;
   huggingFaceToken?: string;
+  huggingFaceUser?: HuggingFaceUser | null;
+  onOpenHuggingFaceModal?: () => void;
+  onSendToChat?: (image: GeneratedImage) => void;
+  initialImage?: GeneratedImage | null;
 }
 
 export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
   onShowToast,
   huggingFaceToken,
+  huggingFaceUser,
+  onOpenHuggingFaceModal,
+  onSendToChat,
+  initialImage,
 }) => {
   // --- Prompt State ---
   const [prompt, setPrompt] = useState(SAMPLE_PROMPTS[0]);
@@ -63,13 +76,18 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
   const [guidanceScale, setGuidanceScale] = useState<number>(7.5);
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 899999) + 100000);
   const [isSeedLocked, setIsSeedLocked] = useState<boolean>(false);
-  const [engine, setEngine] = useState<'gemini' | 'huggingface' | 'procedural'>('gemini');
+  const [engine, setEngine] = useState<'flux-neural' | 'huggingface' | 'gemini' | 'procedural'>('flux-neural');
   const [hfModel, setHfModel] = useState<string>('black-forest-labs/FLUX.1-schnell');
+  const [isCustomHfModel, setIsCustomHfModel] = useState<boolean>(false);
+  const [customHfModelInput, setCustomHfModelInput] = useState<string>('');
 
   // --- Image Studio State ---
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isExpandingPrompt, setIsExpandingPrompt] = useState<boolean>(false);
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // --- History & Active Image ---
   const [history, setHistory] = useState<GeneratedImage[]>(() => {
@@ -81,7 +99,7 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
   });
 
   const [activeImage, setActiveImage] = useState<GeneratedImage | null>(() => {
-    return history.length > 0 ? history[0] : null;
+    return initialImage || (history.length > 0 ? history[0] : null);
   });
 
   // --- Live Post-Processing Adjustments ---
@@ -101,6 +119,20 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
 
   // --- Canvas Zoom State ---
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+
+  // Sync initialImage if provided from external views (e.g. Chat)
+  useEffect(() => {
+    if (initialImage) {
+      setActiveImage(initialImage);
+      setHistory((prev) => {
+        if (!prev.some((img) => img.id === initialImage.id)) {
+          return [initialImage, ...prev];
+        }
+        return prev;
+      });
+      setViewMode('normal');
+    }
+  }, [initialImage]);
 
   // Save history to localStorage
   useEffect(() => {
@@ -124,6 +156,62 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
       handleGenerate();
     }
   }, []);
+
+  // --- Image File Upload Handler ---
+  const handleImageUpload = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      onShowToast('Please select a valid image file (PNG, JPG, WEBP)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        const uploadedImg: GeneratedImage = {
+          id: `upload-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          prompt: cleanName || 'Uploaded user image',
+          fullPrompt: `Uploaded Image: ${file.name}`,
+          aspectRatio: '1:1',
+          imageSize: '1K',
+          seed: Math.floor(Math.random() * 899999) + 100000,
+          guidanceScale: 7.5,
+          steps: 20,
+          engine: 'huggingface',
+          modelName: 'Uploaded Asset',
+          imageUrl: dataUrl,
+          source: 'procedural-remix',
+          createdAt: Date.now(),
+          adjustments: DEFAULT_IMAGE_ADJUSTMENTS,
+        };
+
+        setHistory((prev) => [uploadedImg, ...prev]);
+        setActiveImage(uploadedImg);
+        setViewMode('normal');
+        onShowToast(`Uploaded image "${file.name}" loaded into studio canvas.`);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleImageUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
 
   // --- Helper: Toggle Modifier Pill ---
   const toggleModifier = (modId: string) => {
@@ -193,8 +281,8 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
           aspectRatio,
           imageSize,
           engine,
-          hfModel,
-          hfToken: huggingFaceToken,
+          hfModel: isCustomHfModel && customHfModelInput.trim() ? customHfModelInput.trim() : hfModel,
+          hfToken: huggingFaceToken || huggingFaceUser?.token,
           seed: currentSeed,
           guidanceScale,
           stylePreset: activeStyleObj?.promptSnippet,
@@ -203,8 +291,9 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
       });
 
       const data = await res.json();
+      const finalImageUrl = data.imageUrl || data.image;
 
-      if (data.success && data.imageUrl) {
+      if (data.success && finalImageUrl) {
         const newImg: GeneratedImage = {
           id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           prompt,
@@ -217,8 +306,8 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
           steps: 28,
           engine,
           modelName: data.model || engine,
-          imageUrl: data.imageUrl,
-          source: data.source || 'gemini',
+          imageUrl: finalImageUrl,
+          source: data.source || 'flux-neural',
           createdAt: Date.now(),
           stylePreset: selectedStyle,
           modifiers: selectedModifiers,
@@ -265,7 +354,8 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
       });
 
       const data = await res.json();
-      if (data.success && data.imageUrl) {
+      const finalImageUrl = data.imageUrl || data.image;
+      if (data.success && finalImageUrl) {
         const remixedImg: GeneratedImage = {
           id: `remix-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           prompt: `${activeImage.prompt} // Modified: ${remixInstruction}`,
@@ -277,7 +367,7 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
           steps: 28,
           engine: 'gemini',
           modelName: data.model || 'gemini-3.1-flash-lite-image',
-          imageUrl: data.imageUrl,
+          imageUrl: finalImageUrl,
           source: data.source || 'gemini-modified',
           createdAt: Date.now(),
           parentImageId: activeImage.id,
@@ -710,22 +800,37 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
 
               {/* Engine Selection */}
               <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8e8e9c] mb-1 font-mono">
-                  Inference Engine
-                </label>
-                <div className="grid grid-cols-3 gap-1">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8e8e9c] font-mono">
+                    Inference Engine
+                  </label>
+                  {engine === 'flux-neural' && (
+                    <span className="flex items-center gap-1 text-[9px] font-mono text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>FLUX.1 Ultra Active</span>
+                    </span>
+                  )}
+                  {engine === 'huggingface' && (
+                    <span className="flex items-center gap-1 text-[9px] font-mono text-amber-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      <span>HF Inference Active</span>
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: 'gemini', label: 'Gemini 3.1', desc: 'Google GenAI' },
-                    { id: 'huggingface', label: 'FLUX.1', desc: 'HF Router' },
-                    { id: 'procedural', label: 'Synth', desc: 'Deterministic' },
+                    { id: 'flux-neural', label: 'FLUX.1 Neural', desc: 'Instant Diffusion (Zero Auth)' },
+                    { id: 'huggingface', label: 'Hugging Face Hub', desc: 'FLUX / SDXL (Token)' },
+                    { id: 'gemini', label: 'Gemini 3.1', desc: 'Google GenAI (Key)' },
+                    { id: 'procedural', label: 'Synth Matrix', desc: 'Deterministic Canvas' },
                   ].map((eng) => (
                     <button
                       key={eng.id}
                       type="button"
                       onClick={() => setEngine(eng.id as any)}
-                      className={`py-1.5 px-2 rounded border text-left transition-colors ${
+                      className={`py-1.5 px-2 rounded border text-left transition-colors cursor-pointer ${
                         engine === eng.id
-                          ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white'
+                          ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white shadow-sm'
                           : 'bg-[#111116] border-[#22222a] text-[#888894] hover:border-[#33333e]'
                       }`}
                     >
@@ -734,6 +839,149 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Hugging Face Generative Model Card & Selector */}
+              {engine === 'huggingface' && (
+                <div className="p-2.5 bg-[#0e0e13] border border-[#23232f] rounded space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a0a0b0] font-mono flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      <span>Hugging Face Model</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomHfModel(!isCustomHfModel)}
+                      className="text-[9px] font-mono text-[var(--color-accent)] hover:underline"
+                    >
+                      {isCustomHfModel ? 'Choose Preset' : '+ Custom Model'}
+                    </button>
+                  </div>
+
+                  {/* Hugging Face Connection Status */}
+                  <div className="flex items-center justify-between p-1.5 bg-[#14141a] rounded border border-[#202028] text-[10px] font-mono">
+                    <div className="flex items-center gap-1.5 text-[#9e9ea8] truncate">
+                      <ShieldCheck className={`w-3.5 h-3.5 ${huggingFaceUser || huggingFaceToken ? 'text-emerald-400' : 'text-amber-400'}`} />
+                      <span className="truncate">
+                        {huggingFaceUser
+                          ? `@${huggingFaceUser.username}`
+                          : huggingFaceToken
+                          ? 'HF Token Linked'
+                          : 'Public Serverless (Free)'}
+                      </span>
+                    </div>
+                    {onOpenHuggingFaceModal && (
+                      <button
+                        type="button"
+                        onClick={onOpenHuggingFaceModal}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-[#20202a] hover:bg-[#282834] text-[var(--color-accent)] border border-[#333342] transition-colors"
+                      >
+                        {huggingFaceUser || huggingFaceToken ? 'Account' : 'Link Token'}
+                      </button>
+                    )}
+                  </div>
+
+                  {isCustomHfModel ? (
+                    <div>
+                      <input
+                        type="text"
+                        value={customHfModelInput}
+                        onChange={(e) => setCustomHfModelInput(e.target.value)}
+                        placeholder="e.g. black-forest-labs/FLUX.1-dev or stabilityai/sdxl-turbo"
+                        className="w-full px-2.5 py-1.5 text-xs bg-[#111116] border border-[#262634] rounded text-white focus:outline-none focus:border-[var(--color-accent)] font-mono text-[11px]"
+                      />
+                      <span className="text-[8px] text-[#666675] font-sans mt-0.5 block">
+                        Specify any text-to-image repository on Hugging Face Hub.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-44 overflow-y-auto pr-0.5">
+                      {HF_GENERATIVE_IMAGE_MODELS.map((model) => {
+                        const isSelected = hfModel === model.id && !isCustomHfModel;
+                        return (
+                          <button
+                            key={model.id}
+                            type="button"
+                            onClick={() => {
+                              setHfModel(model.id);
+                              setIsCustomHfModel(false);
+                              if (model.recommendedAspect) setAspectRatio(model.recommendedAspect as any);
+                            }}
+                            className={`w-full p-2 rounded border text-left transition-colors cursor-pointer flex flex-col gap-0.5 ${
+                              isSelected
+                                ? 'bg-[var(--color-accent)]/15 border-[var(--color-accent)] text-white'
+                                : 'bg-[#121218] border-[#1e1e26] text-[#8e8e9c] hover:border-[#333342] hover:text-[#d0d0dc]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-[11px] font-medium font-mono text-white flex items-center gap-1.5">
+                                <span className={isSelected ? 'text-[var(--color-accent)]' : 'text-[#666675]'}>●</span>
+                                <span>{model.name}</span>
+                              </span>
+                              {model.badge && (
+                                <span className="text-[8px] font-mono uppercase px-1 py-0.2 rounded bg-[var(--color-accent)]/20 text-[var(--color-accent)] border border-[var(--color-accent)]/30">
+                                  {model.badge}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[9px] text-[#787888] leading-tight line-clamp-1">
+                              {model.description}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Direct Image Upload & Reference Section */}
+            <div className="pt-2 border-t border-[#1b1b22]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8e8e9c] font-mono flex items-center gap-1.5">
+                  <UploadCloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                  <span>Image Upload & Baseline</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => uploadInputRef.current?.click()}
+                  className="px-2 py-0.5 text-[10px] font-mono text-[var(--color-accent)] bg-[var(--color-accent)]/10 hover:bg-[var(--color-accent)]/20 border border-[var(--color-accent)]/30 rounded transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Select File</span>
+                </button>
+              </div>
+
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handleImageUpload(e.target.files[0]);
+                    e.target.value = '';
+                  }
+                }}
+                className="hidden"
+              />
+
+              <div
+                onClick={() => uploadInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`p-2.5 rounded border border-dashed text-center cursor-pointer transition-colors ${
+                  isDraggingOver
+                    ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white'
+                    : 'border-[#262634] bg-[#111116] hover:border-[#383848] text-[#888898]'
+                }`}
+              >
+                <Upload className="w-4 h-4 mx-auto mb-1 text-[var(--color-accent)] opacity-80" />
+                <p className="text-[10px] font-mono">Click or drop PNG, JPG, or WEBP image here</p>
+                <p className="text-[9px] text-[#666675] font-sans mt-0.5">
+                  Upload images to modify, img2img remix, filter, or transfer to chat
+                </p>
               </div>
             </div>
 
@@ -923,6 +1171,21 @@ export const ImageGeneratorView: React.FC<ImageGeneratorViewProps> = ({
           {activeImage && (
             <div className="flex-none h-12 border-t border-[#1a1a20] px-3 sm:px-5 flex items-center justify-between bg-[#0a0a0e]">
               <div className="flex items-center gap-2">
+                {onSendToChat && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSendToChat(activeImage);
+                      onShowToast('Transferred image to Chat workflow');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--color-accent)] text-black font-semibold hover:bg-[#d8b995] transition-colors cursor-pointer shadow-sm"
+                    title="Send this image directly into active chat conversation"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-black" />
+                    <span>Send to Chat</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowRemixModal(true)}

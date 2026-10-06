@@ -388,7 +388,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
               onClick={() => setShowPersonalityDropdown((prev) => !prev)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#121212] hover:bg-[#1a1a1a] border border-[#282828] text-xs font-mono transition-all text-[#e5e5e5] cursor-pointer"
             >
-              {activePersonality.id.includes('unhinged') ? (
+              {activePersonality.id === 'grok-aura' ? (
+                <Zap className="w-3.5 h-3.5 text-yellow-400 animate-pulse" />
+              ) : activePersonality.id.includes('unhinged') ? (
                 <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
               ) : activePersonality.id.includes('naughty') ? (
                 <Heart className="w-3.5 h-3.5 text-pink-400" />
@@ -425,6 +427,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                       >
                         <div className="flex items-center justify-between font-semibold">
                           <span className="flex items-center gap-1.5 text-white">
+                            {preset.id === 'grok-aura' && (
+                              <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                            )}
                             {preset.id.includes('unhinged') && (
                               <Flame className="w-3.5 h-3.5 text-orange-400" />
                             )}

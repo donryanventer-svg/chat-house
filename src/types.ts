@@ -165,7 +165,8 @@ export type PersonalityPresetId =
   | 'unhinged'
   | 'naughty'
   | 'unhinged-halsey'
-  | 'naughty-halsey';
+  | 'naughty-halsey'
+  | 'grok-aura';
 
 export interface PersonalityPreset {
   id: PersonalityPresetId;
